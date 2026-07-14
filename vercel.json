@@ -3,14 +3,14 @@
   "routes": [
     {
       "src": "/(index.html|app.js|style.css)",
-      "dest": "/public/$1"
+      "dest": "/$1"
     },
     {
       "src": "/",
-      "dest": "/public/index.html"
+      "dest": "/index.html"
     },
     {
-      "src": "/((?!public/).*)",
+      "src": "/((?!index.html|app.js|style.css).*)",
       "dest": "/api/index.js"
     }
   ]
