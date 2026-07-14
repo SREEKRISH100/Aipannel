@@ -2,15 +2,16 @@
   "version": 2,
   "routes": [
     {
+      "src": "/(index.html|app.js|style.css)",
+      "dest": "/public/$1"
+    },
+    {
       "src": "/",
       "dest": "/public/index.html"
     },
     {
-      "handle": "filesystem"
-    },
-    {
       "src": "/(.*)",
-      "dest": "api/index.js"
+      "dest": "/api/index.js"
     }
   ]
 }
