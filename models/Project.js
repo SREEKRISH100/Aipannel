@@ -21,6 +21,11 @@ const ProjectSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
+    apiKey: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

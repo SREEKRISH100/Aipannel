@@ -44,6 +44,16 @@
                   <option value="" disabled selected>Choose a project...</option>
                 </select>
               </div>
+              <div id="newProjectFields" style="display: none;">
+                <div class="form-group">
+                  <label for="newProjectIdInput">New Project ID (Unique, e.g. custom-app)</label>
+                  <input type="text" id="newProjectIdInput" placeholder="e.g. translation-app" pattern="^[a-zA-Z0-9-_]+$">
+                </div>
+                <div class="form-group">
+                  <label for="newProjectNameInput">New Project Name</label>
+                  <input type="text" id="newProjectNameInput" placeholder="e.g. Translation App">
+                </div>
+              </div>
               <div class="form-group">
                 <label for="tokenLimitInput">Token Limit</label>
                 <input type="number" id="tokenLimitInput" placeholder="e.g. 1000000" required>
@@ -52,7 +62,7 @@
                 <input type="checkbox" id="projectActiveInput" checked>
                 <label for="projectActiveInput">Project Active & Enabled</label>
               </div>
-              <button type="submit" class="btn btn-primary">Update Configuration</button>
+              <button type="submit" id="submitConfigBtn" class="btn btn-primary">Update Configuration</button>
             </form>
           </div>
         </section>

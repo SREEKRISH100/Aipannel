@@ -1,13 +1,10 @@
-import dns from 'node:dns';
-dns.setServers(['1.1.1.1', '8.8.8.8']);
-
 import express from 'express';
 import mongoose from 'mongoose';
-
 import cors from 'cors';
 import dotenv from 'dotenv';
 import OpenAI from 'openai';
 import Project from './models/Project.js';
+import crypto from 'crypto';
 import UsageLog from './models/UsageLog.js';
 
 dotenv.config();
@@ -47,12 +44,30 @@ app.post('/api/projects', async (req, res) => {
   try {
     const project = await Project.findOneAndUpdate(
       { projectId },
-      { name, tokenLimit, isActive },
+      { $set: { name, tokenLimit, isActive }, $setOnInsert: { apiKey: crypto.randomUUID().replace(/-/g, '') } },
       { new: true, upsert: true }
     );
     res.json({ success: true, project });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Generate or retrieve API key for a project
+app.post('/api/projects/:projectId/key', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const project = await Project.findOne({ projectId });
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    if (!project.apiKey) {
+      project.apiKey = crypto.randomUUID().replace(/-/g, '');
+      await project.save();
+    }
+    res.json({ success: true, apiKey: project.apiKey });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -74,6 +89,21 @@ app.post('/api/projects/reset', async (req, res) => {
   }
 });
 
+// Delete a project and its usage logs
+app.delete('/api/projects/:projectId', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const project = await Project.findOneAndDelete({ projectId });
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    await UsageLog.deleteMany({ projectId });
+    res.json({ success: true, message: 'Project deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Fetch detailed token usage logs
 app.get('/api/logs', async (req, res) => {
   try {
@@ -86,29 +116,36 @@ app.get('/api/logs', async (req, res) => {
 
 // ─── TOKEN-TRACKING COMPLETIONS PROXY GATEWAY ──────────────────────────────
 
-app.post('/api/v1/chat/completions', async (req, res) => {
-  const projectId = req.headers['x-project-id'];
+const completionsHandler = async (req, res) => {
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.replace('Bearer ', '').trim();
 
-  console.log(`[Proxy Gateway] Incoming request from project: "${projectId}"`);
-  console.log(`[Proxy Gateway] Authorization:`, req.headers['authorization'] ? 'Present (Bearer [hidden])' : 'Missing');
+  // 1. Resolve Project ID (from route param, header, or looking up token)
+  let projectId = req.params.projectId || req.headers['x-project-id'];
+  let project = null;
 
-  if (!projectId) {
-    console.warn(`[Proxy Gateway] Request blocked: Missing x-project-id header.`);
-    return res.status(400).json({ error: "Missing required header: 'x-project-id'" });
+  if (projectId) {
+    project = await Project.findOne({ projectId });
+  } else if (token) {
+    // If no explicit project ID was provided, try looking it up by its API Key
+    project = await Project.findOne({ apiKey: token });
+    if (project) {
+      projectId = project.projectId;
+    }
+  }
+
+  console.log(`[Proxy Gateway] Incoming request for project ID: "${projectId || 'unknown'}"`);
+  console.log(`[Proxy Gateway] Authorization:`, authHeader ? 'Present (Bearer [hidden])' : 'Missing');
+
+  if (!project) {
+    return res.status(404).json({ error: "Project not found or not registered. Please check your project ID or API Key." });
   }
 
   try {
-    // 1. Retrieve project settings or auto-generate defaults
-    let project = await Project.findOne({ projectId });
-    if (!project) {
-      const defaultName = projectId === "nextjs-project" ? "Next.js Admin Panel" : "React Node Chatbot";
-      project = await Project.create({
-        projectId,
-        name: defaultName,
-        tokenLimit: 500000,
-        tokensUsed: 0,
-        isActive: true
-      });
+    // Auto-generate apiKey if missing for older projects
+    if (!project.apiKey) {
+      project.apiKey = crypto.randomUUID().replace(/-/g, '');
+      await project.save();
     }
 
     // 2. Validate limit criteria
@@ -122,12 +159,26 @@ app.post('/api/v1/chat/completions', async (req, res) => {
       });
     }
 
-    // 3. Forward message parameters to OpenAI API
-    const authHeader = req.headers['authorization'];
-    const clientApiKey = authHeader ? authHeader.replace('Bearer ', '') : process.env.OPENAI_API_KEY;
+    // 3. Authenticate and resolve OpenAI API Key
+    let clientApiKey = '';
+
+    if (project.apiKey) {
+      if (token === project.apiKey) {
+        // Authenticated via Project Proxy API Key -> use server's master OpenAI Key
+        clientApiKey = process.env.OPENAI_API_KEY;
+      } else if (token.startsWith('sk-')) {
+        // Fallback: Authenticated directly with a raw OpenAI API key
+        clientApiKey = token;
+      } else {
+        return res.status(401).json({ error: "Unauthorized: Invalid API Key for this project." });
+      }
+    } else {
+      // For projects without an apiKey, allow using the header or default to master key
+      clientApiKey = token || process.env.OPENAI_API_KEY;
+    }
 
     if (!clientApiKey) {
-      return res.status(401).json({ error: "Unauthorized: Missing OpenAI API Key." });
+      return res.status(401).json({ error: "Unauthorized: Missing API Key." });
     }
 
     const localOpenai = new OpenAI({ apiKey: clientApiKey });
@@ -172,11 +223,14 @@ app.post('/api/v1/chat/completions', async (req, res) => {
     console.error("Proxy gateway error:", error);
     res.status(error.status || 500).json({ error: error.message });
   }
-});
+};
+
+app.post('/api/v1/chat/completions', completionsHandler);
+app.post('/api/v1/projects/:projectId/chat/completions', completionsHandler);
 export default app;
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
-    console.log(`Token tracking proxy running on port ${PORT}`);
+    console.log(`Token tracking proxy running on http://localhost:${PORT}`);
   });
 }
