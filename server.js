@@ -21,7 +21,16 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 // Connect to MongoDB
 mongoose.connect(MONGO_URL)
   .then(() => console.log('MongoDB connection established successfully.'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+  .catch((err) => console.error('MongoDB initial connection error:', err));
+
+// Prevent server crash on database connection dropouts or DNS errors
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection runtime error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('MongoDB disconnected. Mongoose will attempt to reconnect...');
+});
 
 // ─── ADMIN & DASHBOARD ENDPOINTS ───────────────────────────────────────────
 
