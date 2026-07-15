@@ -3,10 +3,11 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import OpenAI from 'openai';
-import Project from './models/Project.js';
+import Client from './models/Client.js';
 import crypto from 'crypto';
 import UsageLog from './models/UsageLog.js';
 import dns from 'dns';
+import cron from 'node-cron';
 
 // Force Node to use Google and Cloudflare DNS to resolve MongoDB Atlas SRV records
 try {
@@ -40,89 +41,131 @@ mongoose.connection.on('disconnected', () => {
   console.warn('MongoDB disconnected. Mongoose will attempt to reconnect...');
 });
 
-// ─── ADMIN & DASHBOARD ENDPOINTS ───────────────────────────────────────────
-
-// Fetch stats of all projects (token limits, usage)
-app.get('/api/projects', async (req, res) => {
+// ─── MONTHLY TOKEN RESET SCHEDULER ──────────────────────────────────────────
+cron.schedule('0 0 1 * *', async () => {
+  console.log('[Cron Job] Executing monthly token usage reset...');
   try {
-    const projects = await Project.find({});
-    res.json({ success: true, projects });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Configure or create project token limits
-app.post('/api/projects', async (req, res) => {
-  const { projectId, name, tokenLimit, isActive } = req.body;
-  if (!projectId || !name) {
-    return res.status(400).json({ success: false, error: "projectId and name are required." });
-  }
-  try {
-    const project = await Project.findOneAndUpdate(
-      { projectId },
-      { $set: { name, tokenLimit, isActive }, $setOnInsert: { apiKey: crypto.randomUUID().replace(/-/g, '') } },
-      { new: true, upsert: true }
+    const result = await Client.updateMany(
+      { resetCycle: 'monthly' },
+      { $set: { tokensUsed: 0 } }
     );
-    res.json({ success: true, project });
+    console.log(`[Cron Job] Successfully reset token counters for ${result.modifiedCount} clients.`);
+  } catch (error) {
+    console.error('[Cron Job] Error resetting monthly token usage:', error);
+  }
+});
+
+// ─── SUPER ADMIN & DASHBOARD ENDPOINTS ──────────────────────────────────────
+
+// GET /api/admin/clients: List all registered clients
+app.get('/api/admin/clients', async (req, res) => {
+  try {
+    const clients = await Client.find({}).sort({ createdAt: -1 });
+    res.json({ success: true, clients });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Generate or retrieve API key for a project
-app.post('/api/projects/:projectId/key', async (req, res) => {
-  const { projectId } = req.params;
+// POST /api/admin/clients: Add a new client
+app.post('/api/admin/clients', async (req, res) => {
+  const { clientId, name, tokenLimit, isActive, resetCycle } = req.body;
+  if (!clientId || !name) {
+    return res.status(400).json({ success: false, error: "clientId and name are required." });
+  }
   try {
-    const project = await Project.findOne({ projectId });
-    if (!project) {
-      return res.status(404).json({ success: false, error: 'Project not found' });
+    const existingClient = await Client.findOne({ clientId });
+    if (existingClient) {
+      return res.status(400).json({ success: false, error: `Client with ID "${clientId}" already exists.` });
     }
-    if (!project.apiKey) {
-      project.apiKey = crypto.randomUUID().replace(/-/g, '');
-      await project.save();
-    }
-    res.json({ success: true, apiKey: project.apiKey });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+
+    const client = await Client.create({
+      clientId,
+      name,
+      tokenLimit: tokenLimit !== undefined ? tokenLimit : 1000000,
+      isActive: isActive !== undefined ? isActive : true,
+      resetCycle: resetCycle || 'monthly',
+      apiKey: crypto.randomUUID().replace(/-/g, '')
+    });
+    res.json({ success: true, client });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Reset project token consumption
-app.post('/api/projects/reset', async (req, res) => {
-  const { projectId } = req.body;
-  if (!projectId) {
-    return res.status(400).json({ success: false, error: "projectId is required." });
-  }
+// PATCH /api/admin/clients/:clientId: Edit a client
+app.patch('/api/admin/clients/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  const { name, tokenLimit, isActive, resetCycle, resetTokens } = req.body;
   try {
-    const project = await Project.findOneAndUpdate(
-      { projectId },
-      { tokensUsed: 0 },
+    const updateObj = {};
+    if (name !== undefined) updateObj.name = name;
+    if (tokenLimit !== undefined) updateObj.tokenLimit = tokenLimit;
+    if (isActive !== undefined) updateObj.isActive = isActive;
+    if (resetCycle !== undefined) updateObj.resetCycle = resetCycle;
+    if (resetTokens === true) updateObj.tokensUsed = 0;
+
+    const client = await Client.findOneAndUpdate(
+      { clientId },
+      { $set: updateObj },
       { new: true }
     );
-    res.json({ success: true, project });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Delete a project and its usage logs
-app.delete('/api/projects/:projectId', async (req, res) => {
-  const { projectId } = req.params;
-  try {
-    const project = await Project.findOneAndDelete({ projectId });
-    if (!project) {
-      return res.status(404).json({ success: false, error: 'Project not found' });
+    if (!client) {
+      return res.status(404).json({ success: false, error: "Client not found." });
     }
-    await UsageLog.deleteMany({ projectId });
-    res.json({ success: true, message: 'Project deleted successfully' });
+    res.json({ success: true, client });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Fetch detailed token usage logs
-app.get('/api/logs', async (req, res) => {
+// POST /api/admin/clients/:clientId/rotate-key: Rotate API Key
+app.post('/api/admin/clients/:clientId/rotate-key', async (req, res) => {
+  const { clientId } = req.params;
+  try {
+    const newApiKey = crypto.randomUUID().replace(/-/g, '');
+    const client = await Client.findOneAndUpdate(
+      { clientId },
+      { $set: { apiKey: newApiKey } },
+      { new: true }
+    );
+    if (!client) {
+      return res.status(404).json({ success: false, error: "Client not found." });
+    }
+    res.json({ success: true, apiKey: client.apiKey, client });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /api/admin/clients/:clientId: Delete a client and their logs (for dashboard sync)
+app.delete('/api/admin/clients/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  try {
+    const client = await Client.findOneAndDelete({ clientId });
+    if (!client) {
+      return res.status(404).json({ success: false, error: "Client not found." });
+    }
+    await UsageLog.deleteMany({ clientId });
+    res.json({ success: true, message: "Client deleted successfully." });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/admin/logs/:clientId: Retrieve granular usage logs for a client
+app.get('/api/admin/logs/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  try {
+    const logs = await UsageLog.find({ clientId }).sort({ createdAt: -1 }).limit(100);
+    res.json({ success: true, logs });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/admin/logs: List all logs (for audit dashboard global view)
+app.get('/api/admin/logs', async (req, res) => {
   try {
     const logs = await UsageLog.find({}).sort({ createdAt: -1 }).limit(100);
     res.json({ success: true, logs });
@@ -137,65 +180,30 @@ const completionsHandler = async (req, res) => {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.replace('Bearer ', '').trim();
 
-  // 1. Resolve Project ID (from route param, header, or looking up token)
-  let projectId = req.params.projectId || req.headers['x-project-id'];
-  let project = null;
-
-  if (projectId) {
-    project = await Project.findOne({ projectId });
-  } else if (token) {
-    // If no explicit project ID was provided, try looking it up by its API Key
-    project = await Project.findOne({ apiKey: token });
-    if (project) {
-      projectId = project.projectId;
-    }
-  }
-
-  console.log(`[Proxy Gateway] Incoming request for project ID: "${projectId || 'unknown'}"`);
-  console.log(`[Proxy Gateway] Authorization:`, authHeader ? 'Present (Bearer [hidden])' : 'Missing');
-
-  if (!project) {
-    return res.status(404).json({ error: "Project not found or not registered. Please check your project ID or API Key." });
+  if (!token) {
+    return res.status(401).json({ error: "Missing API Key. Please provide your Bearer API Key." });
   }
 
   try {
-    // Auto-generate apiKey if missing for older projects
-    if (!project.apiKey) {
-      project.apiKey = crypto.randomUUID().replace(/-/g, '');
-      await project.save();
+    // 1. Authenticate the Client
+    const client = await Client.findOne({ apiKey: token });
+    if (!client) {
+      return res.status(401).json({ error: "Invalid API Key" });
     }
 
-    // 2. Validate limit criteria
-    if (!project.isActive) {
-      return res.status(403).json({ error: `Project '${project.name}' is deactivated.` });
+    // 2. Validate Quota and Status
+    if (client.isActive === false) {
+      return res.status(403).json({ error: "This client account is currently suspended." });
     }
 
-    if (project.tokensUsed >= project.tokenLimit) {
-      return res.status(429).json({
-        error: `Token limit exceeded for project '${project.name}' (${project.tokensUsed.toLocaleString()} / ${project.tokenLimit.toLocaleString()} tokens used).`
-      });
+    if (client.tokensUsed >= client.tokenLimit) {
+      return res.status(429).json({ error: "Monthly token quota exceeded. Please contact the administrator." });
     }
 
-    // 3. Authenticate and resolve OpenAI API Key
-    let clientApiKey = '';
-
-    if (project.apiKey) {
-      if (token === project.apiKey) {
-        // Authenticated via Project Proxy API Key -> use server's master OpenAI Key
-        clientApiKey = process.env.OPENAI_API_KEY;
-      } else if (token.startsWith('sk-')) {
-        // Fallback: Authenticated directly with a raw OpenAI API key
-        clientApiKey = token;
-      } else {
-        return res.status(401).json({ error: "Unauthorized: Invalid API Key for this project." });
-      }
-    } else {
-      // For projects without an apiKey, allow using the header or default to master key
-      clientApiKey = token || process.env.OPENAI_API_KEY;
-    }
-
+    // 3. Forward Request to OpenAI
+    const clientApiKey = process.env.OPENAI_API_KEY;
     if (!clientApiKey) {
-      return res.status(401).json({ error: "Unauthorized: Missing API Key." });
+      return res.status(500).json({ error: "Server error: Master OpenAI API Key not configured." });
     }
 
     const localOpenai = new OpenAI({ apiKey: clientApiKey });
@@ -209,31 +217,31 @@ const completionsHandler = async (req, res) => {
       temperature
     });
 
-    // 4. Log the usage statistics dynamically
+    // 4. Track & Update Usage
     if (response.usage) {
       const prompt = response.usage.prompt_tokens || 0;
       const completion = response.usage.completion_tokens || 0;
       const total = response.usage.total_tokens || 0;
 
       if (total > 0) {
-        await Project.updateOne(
-          { projectId },
+        await Client.updateOne(
+          { _id: client._id },
           { $inc: { tokensUsed: total } }
         );
 
         await UsageLog.create({
-          projectId,
+          clientId: client.clientId,
           promptTokens: prompt,
           completionTokens: completion,
           totalTokens: total,
           modelName: model || process.env.OPENAI_MODEL || 'gpt-4o-mini'
         });
 
-        console.log(`[Proxy] Tracked ${total} tokens for project '${projectId}'`);
+        console.log(`[Proxy] Tracked ${total} tokens for client '${client.clientId}'`);
       }
     }
 
-    // 5. Pass response payload back to the client application
+    // Send the OpenAI response back to the client
     res.json(response);
 
   } catch (error) {
@@ -243,7 +251,8 @@ const completionsHandler = async (req, res) => {
 };
 
 app.post('/api/v1/chat/completions', completionsHandler);
-app.post('/api/v1/projects/:projectId/chat/completions', completionsHandler);
+app.post('/api/v1/clients/:clientId/chat/completions', completionsHandler);
+app.post('/api/v1/projects/:projectId/chat/completions', completionsHandler); // Legacy backward compatibility
 export default app;
 
 if (!process.env.VERCEL) {

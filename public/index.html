@@ -14,7 +14,7 @@
     <header class="app-header">
       <div class="header-logo">
         <div class="logo-icon">⚡</div>
-        <h1>Token Control Panel</h1>
+        <h1>Tenant Token Control Panel</h1>
       </div>
       <div class="header-actions">
         <button id="refreshBtn" class="btn btn-secondary">
@@ -24,43 +24,51 @@
     </header>
 
     <main class="app-main">
-      <!-- Projects Grid -->
+      <!-- Clients Grid -->
       <section class="section">
-        <h2 class="section-title">Active Projects</h2>
-        <div id="projectsGrid" class="projects-grid">
-          <div class="loading-spinner">Loading projects...</div>
+        <h2 class="section-title">Active Clients (Tenants)</h2>
+        <div id="clientsGrid" class="projects-grid">
+          <div class="loading-spinner">Loading clients...</div>
         </div>
       </section>
 
       <!-- Manage & Config Panel -->
       <div class="layout-columns">
         <section class="section column-left">
-          <h2 class="section-title">Configure Limits</h2>
+          <h2 class="section-title">Configure Client Limits</h2>
           <div class="card form-card">
             <form id="configForm">
               <div class="form-group">
-                <label for="projectSelector">Select Project</label>
-                <select id="projectSelector" required>
-                  <option value="" disabled selected>Choose a project...</option>
+                <label for="clientSelector">Select Client</label>
+                <select id="clientSelector" required>
+                  <option value="" disabled selected>Choose a client...</option>
                 </select>
               </div>
-              <div id="newProjectFields" style="display: none;">
+              <div id="newClientFields" style="display: none;">
                 <div class="form-group">
-                  <label for="newProjectIdInput">New Project ID (Unique, e.g. custom-app)</label>
-                  <input type="text" id="newProjectIdInput" placeholder="e.g. translation-app" pattern="^[a-zA-Z0-9-_]+$">
+                  <label for="newClientIdInput">New Client ID (Unique, e.g. client_acme)</label>
+                  <input type="text" id="newClientIdInput" placeholder="e.g. client_acme" pattern="^[a-zA-Z0-9-_]+$">
                 </div>
                 <div class="form-group">
-                  <label for="newProjectNameInput">New Project Name</label>
-                  <input type="text" id="newProjectNameInput" placeholder="e.g. Translation App">
+                  <label for="newClientNameInput">New Client Name</label>
+                  <input type="text" id="newClientNameInput" placeholder="e.g. Acme Corp">
                 </div>
               </div>
               <div class="form-group">
                 <label for="tokenLimitInput">Token Limit</label>
                 <input type="number" id="tokenLimitInput" placeholder="e.g. 1000000" required>
               </div>
+              <div class="form-group">
+                <label for="resetCycleInput">Reset Cycle</label>
+                <select id="resetCycleInput" required>
+                  <option value="monthly" selected>Monthly</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="none">None (No reset)</option>
+                </select>
+              </div>
               <div class="form-group-checkbox">
-                <input type="checkbox" id="projectActiveInput" checked>
-                <label for="projectActiveInput">Project Active & Enabled</label>
+                <input type="checkbox" id="clientActiveInput" checked>
+                <label for="clientActiveInput">Client Active & Enabled</label>
               </div>
               <button type="submit" id="submitConfigBtn" class="btn btn-primary">Update Configuration</button>
             </form>
@@ -75,7 +83,7 @@
               <table class="audit-table">
                 <thead>
                   <tr>
-                    <th>Project</th>
+                    <th>Client</th>
                     <th>Tokens</th>
                     <th>Model</th>
                     <th>Time</th>

@@ -1,18 +1,19 @@
 document.addEventListener('DOMContentLoaded', () => {
   const refreshBtn = document.getElementById('refreshBtn');
-  const projectsGrid = document.getElementById('projectsGrid');
-  const projectSelector = document.getElementById('projectSelector');
+  const clientsGrid = document.getElementById('clientsGrid');
+  const clientSelector = document.getElementById('clientSelector');
   const configForm = document.getElementById('configForm');
   const tokenLimitInput = document.getElementById('tokenLimitInput');
-  const projectActiveInput = document.getElementById('projectActiveInput');
+  const resetCycleInput = document.getElementById('resetCycleInput');
+  const clientActiveInput = document.getElementById('clientActiveInput');
   const logsBody = document.getElementById('logsBody');
 
-  const newProjectFields = document.getElementById('newProjectFields');
-  const newProjectIdInput = document.getElementById('newProjectIdInput');
-  const newProjectNameInput = document.getElementById('newProjectNameInput');
+  const newClientFields = document.getElementById('newClientFields');
+  const newClientIdInput = document.getElementById('newClientIdInput');
+  const newClientNameInput = document.getElementById('newClientNameInput');
   const submitConfigBtn = document.getElementById('submitConfigBtn');
 
-  let localProjects = [];
+  let localClients = [];
 
   // Helper to copy text to clipboard with fallback
   function copyToClipboard(text) {
@@ -21,14 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           const textArea = document.createElement('textarea');
           textArea.value = val;
-          // Keep outside of viewport and hidden but selectable
           textArea.style.position = 'fixed';
           textArea.style.top = '-9999px';
           textArea.style.left = '-9999px';
           textArea.setAttribute('readonly', '');
           document.body.appendChild(textArea);
           textArea.select();
-          textArea.setSelectionRange(0, 99999); // For mobile devices
+          textArea.setSelectionRange(0, 99999);
           const successful = document.execCommand('copy');
           document.body.removeChild(textArea);
           if (successful) resolve();
@@ -51,29 +51,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load everything
   async function loadData() {
-    await Promise.all([fetchProjects(), fetchLogs()]);
+    await Promise.all([fetchClients(), fetchLogs()]);
   }
 
-  // Fetch Projects
-  async function fetchProjects() {
+  // Fetch Clients
+  async function fetchClients() {
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetch('/api/admin/clients');
       const data = await res.json();
       if (data.success) {
-        localProjects = data.projects;
-        renderProjects(data.projects);
-        updateProjectSelector(data.projects);
+        localClients = data.clients;
+        renderClients(data.clients);
+        updateClientSelector(data.clients);
       }
     } catch (err) {
-      console.error('Error fetching projects:', err);
-      projectsGrid.innerHTML = `<div class="loading-spinner">Error loading projects.</div>`;
+      console.error('Error fetching clients:', err);
+      clientsGrid.innerHTML = `<div class="loading-spinner">Error loading clients.</div>`;
     }
   }
 
-  // Fetch Logs
+  // Fetch Audit Logs
   async function fetchLogs() {
     try {
-      const res = await fetch('/api/logs');
+      const res = await fetch('/api/admin/logs');
       const data = await res.json();
       if (data.success) {
         renderLogs(data.logs);
@@ -84,19 +84,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Render Projects Grid
-  function renderProjects(projects) {
-    if (projects.length === 0) {
-      projectsGrid.innerHTML = `<div class="loading-spinner">No projects registered.</div>`;
+  // Render Clients Grid
+  function renderClients(clients) {
+    if (clients.length === 0) {
+      clientsGrid.innerHTML = `<div class="loading-spinner">No clients registered.</div>`;
       return;
     }
 
-    projectsGrid.innerHTML = '';
-    projects.forEach(project => {
-      const percentage = Math.min(((project.tokensUsed / project.tokenLimit) * 100), 100).toFixed(1);
-      const isOverLimit = project.tokensUsed >= project.tokenLimit;
-      const statusClass = project.isActive ? 'active' : 'suspended';
-      const statusLabel = project.isActive ? 'Active' : 'Disabled';
+    clientsGrid.innerHTML = '';
+    clients.forEach(client => {
+      const percentage = Math.min(((client.tokensUsed / client.tokenLimit) * 100), 100).toFixed(1);
+      const isOverLimit = client.tokensUsed >= client.tokenLimit;
+      const statusClass = client.isActive ? 'active' : 'suspended';
+      const statusLabel = client.isActive ? 'Active' : 'Disabled';
 
       let progressColorClass = '';
       if (percentage >= 90) {
@@ -108,31 +108,34 @@ document.addEventListener('DOMContentLoaded', () => {
       const card = document.createElement('div');
       card.className = 'card project-card';
       
-      const apiKeyHtml = project.apiKey 
+      const apiKeyHtml = client.apiKey 
         ? `
           <div class="api-key-box" style="margin-top: 1.25rem; padding: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 0.5rem; font-size: 0.8125rem; border: 1px solid rgba(255,255,255,0.05);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
               <span style="color: var(--text-secondary);">API Key:</span>
-              <code class="api-key-text" style="font-family: monospace; color: var(--accent-color); font-weight: 600;">${project.apiKey}</code>
+              <code class="api-key-text" style="font-family: monospace; color: var(--accent-color); font-weight: 600;">${client.apiKey}</code>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
               <span style="color: var(--text-secondary);">Endpoint:</span>
-              <code style="font-family: monospace; font-size: 0.75rem; color: var(--text-primary); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${window.location.origin}/api/v1/projects/${project.projectId}">.../api/v1/projects/${project.projectId}</code>
+              <code style="font-family: monospace; font-size: 0.75rem; color: var(--text-primary); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${window.location.origin}/api/v1/clients/${client.clientId}">.../api/v1/clients/${client.clientId}</code>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-              <button class="btn btn-secondary btn-copy-key" data-key="${project.apiKey}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1; justify-content: center;">
+              <button class="btn btn-secondary btn-copy-key" data-key="${client.apiKey}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1; justify-content: center;">
                 📋 Copy Key
               </button>
-              <button class="btn btn-secondary btn-copy-endpoint" data-endpoint="${window.location.origin}/api/v1/projects/${project.projectId}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1; justify-content: center;">
+              <button class="btn btn-secondary btn-copy-endpoint" data-endpoint="${window.location.origin}/api/v1/clients/${client.clientId}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1; justify-content: center;">
                 🔗 Copy Url
               </button>
             </div>
+            <button class="btn btn-secondary btn-rotate-key" data-id="${client.clientId}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; width: 100%; margin-top: 0.5rem; justify-content: center;">
+              🔄 Rotate API Key
+            </button>
           </div>
         `
         : `
           <div class="api-key-box" style="margin-top: 1.25rem; padding: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 0.5rem; font-size: 0.8125rem; border: 1px solid rgba(255,255,255,0.05); text-align: center;">
             <span style="color: var(--text-secondary); display: block; margin-bottom: 0.5rem;">No API Key generated.</span>
-            <button class="btn btn-primary btn-generate-key" data-id="${project.projectId}" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; margin: 0 auto; display: inline-flex;">
+            <button class="btn btn-primary btn-rotate-key" data-id="${client.clientId}" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; margin: 0 auto; display: inline-flex;">
               🔑 Generate Key
             </button>
           </div>
@@ -141,15 +144,15 @@ document.addEventListener('DOMContentLoaded', () => {
       card.innerHTML = `
         <div class="project-card-header">
           <div class="project-title">
-            <h3>${project.name}</h3>
-            <span class="project-id">${project.projectId}</span>
+            <h3>${client.name}</h3>
+            <span class="project-id">${client.clientId} <span style="font-size: 0.7rem; color: var(--text-secondary); font-style: italic;">(${client.resetCycle} reset)</span></span>
           </div>
           <span class="status-badge ${statusClass}">${statusLabel}</span>
         </div>
         <div class="progress-container">
           <div class="progress-labels">
-            <span>Tokens Used: <span class="tokens-total">${project.tokensUsed.toLocaleString()}</span></span>
-            <span>Limit: ${project.tokenLimit.toLocaleString()}</span>
+            <span>Tokens Used: <span class="tokens-total">${client.tokensUsed.toLocaleString()}</span></span>
+            <span>Limit: ${client.tokenLimit.toLocaleString()}</span>
           </div>
           <div class="progress-track">
             <div class="progress-bar ${progressColorClass}" style="width: ${percentage}%"></div>
@@ -161,27 +164,27 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         ${apiKeyHtml}
         <div class="project-card-footer" style="margin-top: 1.25rem; display: flex; justify-content: space-between; gap: 0.5rem;">
-          <button class="btn btn-danger btn-reset" data-id="${project.projectId}" style="flex: 1; justify-content: center;">
+          <button class="btn btn-danger btn-reset-tokens" data-id="${client.clientId}" style="flex: 1; justify-content: center;">
             Reset Tokens
           </button>
-          <button class="btn btn-secondary btn-delete" data-id="${project.projectId}" style="color: var(--danger-color); border-color: rgba(239, 68, 68, 0.2); justify-content: center;">
+          <button class="btn btn-secondary btn-delete-client" data-id="${client.clientId}" style="color: var(--danger-color); border-color: rgba(239, 68, 68, 0.2); justify-content: center;">
             🗑️ Delete
           </button>
         </div>
       `;
-      projectsGrid.appendChild(card);
+      clientsGrid.appendChild(card);
     });
 
-    // Wire up reset buttons
-    document.querySelectorAll('.btn-reset').forEach(btn => {
+    // Wire up reset token buttons
+    document.querySelectorAll('.btn-reset-tokens').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const projectId = e.target.getAttribute('data-id');
-        if (confirm(`Are you sure you want to reset the token usage counter for "${projectId}"?`)) {
+        const clientId = e.target.getAttribute('data-id');
+        if (confirm(`Are you sure you want to reset token usage for client "${clientId}"?`)) {
           try {
-            const res = await fetch('/api/projects/reset', {
-              method: 'POST',
+            const res = await fetch(`/api/admin/clients/${clientId}`, {
+              method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ projectId })
+              body: JSON.stringify({ resetTokens: true })
             });
             const data = await res.json();
             if (data.success) {
@@ -198,30 +201,53 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Wire up delete buttons
-    document.querySelectorAll('.btn-delete').forEach(btn => {
+    document.querySelectorAll('.btn-delete-client').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const projectId = e.currentTarget.getAttribute('data-id');
-        if (confirm(`⚠️ Are you sure you want to DELETE project "${projectId}"?\nThis will permanently delete the project and all its completions logs. This action cannot be undone.`)) {
+        const clientId = e.currentTarget.getAttribute('data-id');
+        if (confirm(`⚠️ Are you sure you want to DELETE client "${clientId}"?\nThis will permanently delete the client and all their completions logs. This action cannot be undone.`)) {
           try {
-            const res = await fetch(`/api/projects/${projectId}`, {
+            const res = await fetch(`/api/admin/clients/${clientId}`, {
               method: 'DELETE'
             });
             const data = await res.json();
             if (data.success) {
-              alert('Project deleted successfully.');
+              alert('Client deleted successfully.');
               
-              // If deleted project was currently selected in config panel, reset selector
-              if (projectSelector.value === projectId) {
-                projectSelector.value = '';
-                projectSelector.dispatchEvent(new Event('change'));
+              // If deleted client was currently selected in config panel, reset selector
+              if (clientSelector.value === clientId) {
+                clientSelector.value = '';
+                clientSelector.dispatchEvent(new Event('change'));
               }
               
               loadData();
             } else {
-              alert('Error deleting project: ' + data.error);
+              alert('Error deleting client: ' + data.error);
             }
           } catch (err) {
             alert('Failed to execute delete operation.');
+          }
+        }
+      });
+    });
+
+    // Wire up rotate API Key buttons
+    document.querySelectorAll('.btn-rotate-key').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const clientId = e.currentTarget.getAttribute('data-id');
+        if (confirm(`🔄 Are you sure you want to rotate the API Key for client "${clientId}"?\nAny application using the old API Key will immediately fail to authenticate.`)) {
+          try {
+            const res = await fetch(`/api/admin/clients/${clientId}/rotate-key`, {
+              method: 'POST'
+            });
+            const data = await res.json();
+            if (data.success) {
+              alert(`API Key rotated successfully.\n\nNew Key: ${data.apiKey}`);
+              loadData();
+            } else {
+              alert('Error rotating key: ' + data.error);
+            }
+          } catch (err) {
+            alert('Failed to rotate API key.');
           }
         }
       });
@@ -256,27 +282,6 @@ document.addEventListener('DOMContentLoaded', () => {
           .catch((err) => alert('Failed to copy endpoint URL: ' + err.message));
       });
     });
-
-    // Wire up generate key buttons
-    document.querySelectorAll('.btn-generate-key').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const projectId = e.currentTarget.getAttribute('data-id');
-        try {
-          const res = await fetch(`/api/projects/${projectId}/key`, {
-            method: 'POST'
-          });
-          const data = await res.json();
-          if (data.success) {
-            alert('API Key generated successfully.');
-            loadData();
-          } else {
-            alert('Error generating key: ' + data.error);
-          }
-        } catch (err) {
-          alert('Failed to generate API key.');
-        }
-      });
-    });
   }
 
   // Render Table Logs
@@ -291,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const row = document.createElement('tr');
       const timeString = new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       row.innerHTML = `
-        <td class="log-project">${log.projectId}</td>
+        <td class="log-project">${log.clientId}</td>
         <td class="log-tokens">${log.totalTokens.toLocaleString()}</td>
         <td><span class="log-model">${log.modelName}</span></td>
         <td class="log-time">${timeString}</td>
@@ -301,46 +306,48 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Update Config Dropdown
-  function updateProjectSelector(projects) {
-    const currentSelected = projectSelector.value;
-    projectSelector.innerHTML = `
-      <option value="" disabled selected>Choose a project...</option>
-      <option value="new" style="font-weight: bold; color: var(--primary-color);">+ Add New Project</option>
+  function updateClientSelector(clients) {
+    const currentSelected = clientSelector.value;
+    clientSelector.innerHTML = `
+      <option value="" disabled selected>Choose a client...</option>
+      <option value="new" style="font-weight: bold; color: var(--primary-color);">+ Add New Client</option>
     `;
     
-    projects.forEach(project => {
+    clients.forEach(client => {
       const opt = document.createElement('option');
-      opt.value = project.projectId;
-      opt.textContent = `${project.name} (${project.projectId})`;
-      projectSelector.appendChild(opt);
+      opt.value = client.clientId;
+      opt.textContent = `${client.name} (${client.clientId})`;
+      clientSelector.appendChild(opt);
     });
 
     if (currentSelected) {
-      projectSelector.value = currentSelected;
+      clientSelector.value = currentSelected;
     }
   }
 
   // Handle Selector Change (prefill inputs or toggle new fields)
-  projectSelector.addEventListener('change', (e) => {
+  clientSelector.addEventListener('change', (e) => {
     const selectedId = e.target.value;
     if (selectedId === 'new') {
-      newProjectFields.style.display = 'block';
-      newProjectIdInput.required = true;
-      newProjectNameInput.required = true;
-      newProjectIdInput.value = '';
-      newProjectNameInput.value = '';
-      tokenLimitInput.value = '500000';
-      projectActiveInput.checked = true;
-      submitConfigBtn.textContent = 'Create Project';
+      newClientFields.style.display = 'block';
+      newClientIdInput.required = true;
+      newClientNameInput.required = true;
+      newClientIdInput.value = '';
+      newClientNameInput.value = '';
+      tokenLimitInput.value = '1000000';
+      resetCycleInput.value = 'monthly';
+      clientActiveInput.checked = true;
+      submitConfigBtn.textContent = 'Create Client';
     } else {
-      newProjectFields.style.display = 'none';
-      newProjectIdInput.required = false;
-      newProjectNameInput.required = false;
+      newClientFields.style.display = 'none';
+      newClientIdInput.required = false;
+      newClientNameInput.required = false;
       submitConfigBtn.textContent = 'Update Configuration';
-      const project = localProjects.find(p => p.projectId === selectedId);
-      if (project) {
-        tokenLimitInput.value = project.tokenLimit;
-        projectActiveInput.checked = project.isActive;
+      const client = localClients.find(c => c.clientId === selectedId);
+      if (client) {
+        tokenLimitInput.value = client.tokenLimit;
+        resetCycleInput.value = client.resetCycle || 'monthly';
+        clientActiveInput.checked = client.isActive;
       }
     }
   });
@@ -348,45 +355,48 @@ document.addEventListener('DOMContentLoaded', () => {
   // Handle Config Form Submit
   configForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const selectedValue = projectSelector.value;
-    let projectId = selectedValue;
+    const selectedValue = clientSelector.value;
+    let clientId = selectedValue;
     let name = '';
     const tokenLimit = parseInt(tokenLimitInput.value, 10);
-    const isActive = projectActiveInput.checked;
+    const resetCycle = resetCycleInput.value;
+    const isActive = clientActiveInput.checked;
 
     if (selectedValue === 'new') {
-      projectId = newProjectIdInput.value.trim();
-      name = newProjectNameInput.value.trim();
-      if (!projectId || !name) {
-        alert('Please fill in both the Project ID and Project Name.');
+      clientId = newClientIdInput.value.trim();
+      name = newClientNameInput.value.trim();
+      if (!clientId || !name) {
+        alert('Please fill in both the Client ID and Client Name.');
         return;
       }
     } else {
-      const project = localProjects.find(p => p.projectId === projectId);
-      name = project ? project.name : projectId;
+      const client = localClients.find(c => c.clientId === clientId);
+      name = client ? client.name : clientId;
     }
 
     try {
-      const res = await fetch('/api/projects', {
-        method: 'POST',
+      const url = selectedValue === 'new' ? '/api/admin/clients' : `/api/admin/clients/${clientId}`;
+      const method = selectedValue === 'new' ? 'POST' : 'PATCH';
+      
+      const res = await fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, name, tokenLimit, isActive })
+        body: JSON.stringify({ clientId, name, tokenLimit, isActive, resetCycle })
       });
       const data = await res.json();
       if (data.success) {
-        alert(selectedValue === 'new' ? 'Project created successfully.' : 'Configuration saved successfully.');
+        alert(selectedValue === 'new' ? 'Client created successfully.' : 'Configuration saved successfully.');
         
         // Reset form inputs & styles
-        newProjectFields.style.display = 'none';
-        newProjectIdInput.required = false;
-        newProjectNameInput.required = false;
+        newClientFields.style.display = 'none';
+        newClientIdInput.required = false;
+        newClientNameInput.required = false;
         submitConfigBtn.textContent = 'Update Configuration';
         
-        // Refresh and select the newly created or updated project
+        // Refresh and select the newly created or updated client
         await loadData();
-        projectSelector.value = projectId;
-        // Trigger selection change to update inputs
-        projectSelector.dispatchEvent(new Event('change'));
+        clientSelector.value = clientId;
+        clientSelector.dispatchEvent(new Event('change'));
       } else {
         alert('Failed to save configuration: ' + data.error);
       }

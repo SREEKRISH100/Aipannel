@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const UsageLogSchema = new mongoose.Schema(
   {
-    projectId: {
+    clientId: {
       type: String,
       required: true,
       index: true,
