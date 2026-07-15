@@ -6,6 +6,14 @@ import OpenAI from 'openai';
 import Project from './models/Project.js';
 import crypto from 'crypto';
 import UsageLog from './models/UsageLog.js';
+import dns from 'dns';
+
+// Force Node to use Google and Cloudflare DNS to resolve MongoDB Atlas SRV records
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+  console.warn('Failed to set custom DNS servers:', e.message);
+}
 
 dotenv.config();
 
