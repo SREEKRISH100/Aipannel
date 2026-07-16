@@ -28,7 +28,7 @@ body {
   line-height: 1.5;
   overflow-x: hidden;
   background-image: radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
-                    radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 45%);
+    radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 45%);
 }
 
 .app-container {
@@ -369,7 +369,8 @@ body {
   color: var(--text-secondary);
 }
 
-.no-logs, .loading-spinner {
+.no-logs,
+.loading-spinner {
   text-align: center;
   padding: 3rem !important;
   color: var(--text-secondary);
