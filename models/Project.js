@@ -29,7 +29,23 @@ const ProjectSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
-    }
+    },
+    // ─── Token Reduction Config ───────────────────────────────────────────
+    // Max response tokens OpenAI can return per request (null = no cap)
+    maxTokensPerRequest: {
+      type: Number,
+      default: null,
+    },
+    // Sliding window: how many past messages to keep in context
+    maxHistoryMessages: {
+      type: Number,
+      default: 10,
+    },
+    // Warning threshold % — sends X-Token-Warning header when exceeded (0–100)
+    warningThreshold: {
+      type: Number,
+      default: 80,
+    },
   },
   { timestamps: true }
 );
