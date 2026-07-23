@@ -8,6 +8,14 @@ import OpenAI from 'openai';
 import Project from './models/Project.js';
 import crypto from 'crypto';
 import UsageLog from './models/UsageLog.js';
+import dns from 'dns';
+
+// Fix for Node.js / local ISP querySrv ECONNREFUSED issues with MongoDB Atlas
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+  // fallback if system restricts DNS override
+}
 
 dotenv.config();
 

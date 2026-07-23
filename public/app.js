@@ -26,32 +26,52 @@ document.addEventListener('DOMContentLoaded', () => {
   // Fetch Projects
   async function fetchProjects() {
     try {
+      projectsGrid.innerHTML = `<div class="loading-spinner">Loading projects...</div>`;
       const res = await fetch('/api/projects');
       const data = await res.json();
       if (data.success) {
         localProjects = data.projects;
         renderProjects(data.projects);
         updateProjectSelector(data.projects);
+      } else {
+        const msg = data.error || 'Unknown server error';
+        projectsGrid.innerHTML = `
+          <div style="text-align:center; padding: 2rem; color: var(--danger-color);">
+            <div style="font-size:2rem; margin-bottom:0.5rem;">⚠️</div>
+            <strong>Failed to load projects</strong>
+            <p style="margin:0.5rem 0; color: var(--text-secondary); font-size:0.85rem;">${msg}</p>
+            <button onclick="location.reload()" style="margin-top:0.75rem; padding:0.4rem 1rem; background: var(--primary-color); color:#fff; border:none; border-radius:0.4rem; cursor:pointer;">Retry</button>
+          </div>`;
       }
     } catch (err) {
       console.error('Error fetching projects:', err);
-      projectsGrid.innerHTML = `<div class="loading-spinner">Error loading projects.</div>`;
+      projectsGrid.innerHTML = `
+        <div style="text-align:center; padding: 2rem; color: var(--danger-color);">
+          <div style="font-size:2rem; margin-bottom:0.5rem;">🔌</div>
+          <strong>Cannot connect to server</strong>
+          <p style="margin:0.5rem 0; color: var(--text-secondary); font-size:0.85rem;">Make sure the backend is running.</p>
+          <button onclick="location.reload()" style="margin-top:0.75rem; padding:0.4rem 1rem; background: var(--primary-color); color:#fff; border:none; border-radius:0.4rem; cursor:pointer;">Retry</button>
+        </div>`;
     }
   }
 
   // Fetch Logs
   async function fetchLogs() {
     try {
+      logsBody.innerHTML = `<tr><td colspan="4" class="no-logs">Loading logs...</td></tr>`;
       const res = await fetch('/api/logs');
       const data = await res.json();
       if (data.success) {
         localLogs = data.logs;
         updateLogFilterSelector(data.logs);
         renderFilteredAndPaginatedLogs();
+      } else {
+        const msg = data.error || 'Unknown server error';
+        logsBody.innerHTML = `<tr><td colspan="4" class="no-logs" style="color: var(--danger-color);">⚠️ ${msg}</td></tr>`;
       }
     } catch (err) {
       console.error('Error fetching logs:', err);
-      logsBody.innerHTML = `<tr><td colspan="4" class="no-logs">Error loading logs.</td></tr>`;
+      logsBody.innerHTML = `<tr><td colspan="4" class="no-logs" style="color: var(--danger-color);">🔌 Cannot connect to server.</td></tr>`;
     }
   }
 
