@@ -9,10 +9,10 @@ const MONGO_URL = process.env.MONGO_URL;
 mongoose.connect(MONGO_URL)
   .then(async () => {
     console.log('Connected to MongoDB. Seeding projects...');
-    
+
     // Clear existing configurations
     await Project.deleteMany({});
-    
+
     // Seed projects
     const projects = [
       {
@@ -30,11 +30,11 @@ mongoose.connect(MONGO_URL)
         isActive: true
       }
     ];
-    
+
     await Project.insertMany(projects);
     console.log('Successfully seeded projects:');
     console.log(projects);
-    
+
     await mongoose.connection.close();
     console.log('Database connection closed.');
     process.exit(0);
