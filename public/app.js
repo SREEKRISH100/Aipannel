@@ -7,47 +7,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const projectActiveInput = document.getElementById('projectActiveInput');
   const logsBody = document.getElementById('logsBody');
 
-  const newProjectFields = document.getElementById('newProjectFields');
-  const newProjectIdInput = document.getElementById('newProjectIdInput');
-  const newProjectNameInput = document.getElementById('newProjectNameInput');
-  const submitConfigBtn = document.getElementById('submitConfigBtn');
+  // Logs Filtering & Pagination DOM Elements
+  const logFilter = document.getElementById('logFilter');
+  const pageInfo = document.getElementById('pageInfo');
+  const prevPageBtn = document.getElementById('prevPageBtn');
+  const nextPageBtn = document.getElementById('nextPageBtn');
 
   let localProjects = [];
-
-  // Helper to copy text to clipboard with fallback
-  function copyToClipboard(text) {
-    const fallbackCopy = (val) => {
-      return new Promise((resolve, reject) => {
-        try {
-          const textArea = document.createElement('textarea');
-          textArea.value = val;
-          // Keep outside of viewport and hidden but selectable
-          textArea.style.position = 'fixed';
-          textArea.style.top = '-9999px';
-          textArea.style.left = '-9999px';
-          textArea.setAttribute('readonly', '');
-          document.body.appendChild(textArea);
-          textArea.select();
-          textArea.setSelectionRange(0, 99999); // For mobile devices
-          const successful = document.execCommand('copy');
-          document.body.removeChild(textArea);
-          if (successful) resolve();
-          else reject(new Error('execCommand copy failed'));
-        } catch (err) {
-          reject(err);
-        }
-      });
-    };
-
-    if (navigator.clipboard && window.isSecureContext) {
-      return navigator.clipboard.writeText(text).catch((err) => {
-        console.warn('navigator.clipboard failed, attempting fallback...', err);
-        return fallbackCopy(text);
-      });
-    } else {
-      return fallbackCopy(text);
-    }
-  }
+  let localLogs = [];
+  let currentPage = 1;
+  const pageSize = 10;
 
   // Load everything
   async function loadData() {
@@ -76,12 +45,69 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/logs');
       const data = await res.json();
       if (data.success) {
-        renderLogs(data.logs);
+        localLogs = data.logs;
+        updateLogFilterSelector(data.logs);
+        renderFilteredAndPaginatedLogs();
       }
     } catch (err) {
       console.error('Error fetching logs:', err);
       logsBody.innerHTML = `<tr><td colspan="4" class="no-logs">Error loading logs.</td></tr>`;
     }
+  }
+
+  // Populate Unique Log Project Selector
+  function updateLogFilterSelector(logs) {
+    const currentVal = logFilter.value;
+    const uniqueProjects = [...new Set(logs.map(log => log.projectId))];
+    
+    logFilter.innerHTML = '<option value="all">All Projects</option>';
+    uniqueProjects.forEach(projId => {
+      const opt = document.createElement('option');
+      opt.value = projId;
+      opt.textContent = projId;
+      logFilter.appendChild(opt);
+    });
+    
+    if (uniqueProjects.includes(currentVal)) {
+      logFilter.value = currentVal;
+    } else {
+      logFilter.value = 'all';
+    }
+  }
+
+  // Filter and Paginate Logs Client Side
+  function renderFilteredAndPaginatedLogs() {
+    const filterVal = logFilter.value;
+    let filteredLogs = localLogs;
+    
+    if (filterVal !== 'all') {
+      filteredLogs = localLogs.filter(log => log.projectId === filterVal);
+    }
+    
+    const totalLogs = filteredLogs.length;
+    const totalPages = Math.ceil(totalLogs / pageSize) || 1;
+    
+    if (currentPage > totalPages) {
+      currentPage = totalPages;
+    }
+    if (currentPage < 1) {
+      currentPage = 1;
+    }
+    
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalLogs);
+    const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
+    
+    renderLogs(paginatedLogs);
+    
+    if (totalLogs === 0) {
+      pageInfo.textContent = 'Showing 0-0 of 0 logs';
+    } else {
+      pageInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalLogs} logs`;
+    }
+    
+    prevPageBtn.disabled = currentPage === 1;
+    nextPageBtn.disabled = currentPage === totalPages;
   }
 
   // Render Projects Grid
@@ -107,37 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const card = document.createElement('div');
       card.className = 'card project-card';
-
-      const apiKeyHtml = project.apiKey
-        ? `
-          <div class="api-key-box" style="margin-top: 1.25rem; padding: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 0.5rem; font-size: 0.8125rem; border: 1px solid rgba(255,255,255,0.05);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-              <span style="color: var(--text-secondary);">API Key:</span>
-              <code class="api-key-text" style="font-family: monospace; color: var(--accent-color); font-weight: 600;">${project.apiKey}</code>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-              <span style="color: var(--text-secondary);">Endpoint:</span>
-              <code style="font-family: monospace; font-size: 0.75rem; color: var(--text-primary); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${window.location.origin}/api/v1/projects/${project.projectId}">.../api/v1/projects/${project.projectId}</code>
-            </div>
-            <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-              <button class="btn btn-secondary btn-copy-key" data-key="${project.apiKey}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1; justify-content: center;">
-                📋 Copy Key
-              </button>
-              <button class="btn btn-secondary btn-copy-endpoint" data-endpoint="${window.location.origin}/api/v1/projects/${project.projectId}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1; justify-content: center;">
-                🔗 Copy Url
-              </button>
-            </div>
-          </div>
-        `
-        : `
-          <div class="api-key-box" style="margin-top: 1.25rem; padding: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 0.5rem; font-size: 0.8125rem; border: 1px solid rgba(255,255,255,0.05); text-align: center;">
-            <span style="color: var(--text-secondary); display: block; margin-bottom: 0.5rem;">No API Key generated.</span>
-            <button class="btn btn-primary btn-generate-key" data-id="${project.projectId}" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; margin: 0 auto; display: inline-flex;">
-              🔑 Generate Key
-            </button>
-          </div>
-        `;
-
       card.innerHTML = `
         <div class="project-card-header">
           <div class="project-title">
@@ -159,13 +154,9 @@ document.addEventListener('DOMContentLoaded', () => {
             ${isOverLimit ? '<span style="color: var(--danger-color); font-weight:600;">LIMIT REACHED</span>' : ''}
           </div>
         </div>
-        ${apiKeyHtml}
-        <div class="project-card-footer" style="margin-top: 1.25rem; display: flex; justify-content: space-between; gap: 0.5rem;">
-          <button class="btn btn-danger btn-reset" data-id="${project.projectId}" style="flex: 1; justify-content: center;">
+        <div class="project-card-footer">
+          <button class="btn btn-danger btn-reset" data-id="${project.projectId}">
             Reset Tokens
-          </button>
-          <button class="btn btn-secondary btn-delete" data-id="${project.projectId}" style="color: var(--danger-color); border-color: rgba(239, 68, 68, 0.2); justify-content: center;">
-            🗑️ Delete
           </button>
         </div>
       `;
@@ -196,87 +187,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     });
-
-    // Wire up delete buttons
-    document.querySelectorAll('.btn-delete').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const projectId = e.currentTarget.getAttribute('data-id');
-        if (confirm(`⚠️ Are you sure you want to DELETE project "${projectId}"?\nThis will permanently delete the project and all its completions logs. This action cannot be undone.`)) {
-          try {
-            const res = await fetch(`/api/projects/${projectId}`, {
-              method: 'DELETE'
-            });
-            const data = await res.json();
-            if (data.success) {
-              alert('Project deleted successfully.');
-
-              // If deleted project was currently selected in config panel, reset selector
-              if (projectSelector.value === projectId) {
-                projectSelector.value = '';
-                projectSelector.dispatchEvent(new Event('change'));
-              }
-
-              loadData();
-            } else {
-              alert('Error deleting project: ' + data.error);
-            }
-          } catch (err) {
-            alert('Failed to execute delete operation.');
-          }
-        }
-      });
-    });
-
-    // Wire up copy key buttons
-    document.querySelectorAll('.btn-copy-key').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const button = e.currentTarget;
-        const key = button.getAttribute('data-key');
-        copyToClipboard(key)
-          .then(() => {
-            const originalText = button.innerHTML;
-            button.innerHTML = '✅ Copied!';
-            setTimeout(() => { button.innerHTML = originalText; }, 2000);
-          })
-          .catch((err) => alert('Failed to copy API key: ' + err.message));
-      });
-    });
-
-    // Wire up copy endpoint buttons
-    document.querySelectorAll('.btn-copy-endpoint').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const button = e.currentTarget;
-        const endpoint = button.getAttribute('data-endpoint');
-        copyToClipboard(endpoint)
-          .then(() => {
-            const originalText = button.innerHTML;
-            button.innerHTML = '✅ Copied!';
-            setTimeout(() => { button.innerHTML = originalText; }, 2000);
-          })
-          .catch((err) => alert('Failed to copy endpoint URL: ' + err.message));
-      });
-    });
-
-    // Wire up generate key buttons
-    document.querySelectorAll('.btn-generate-key').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const projectId = e.currentTarget.getAttribute('data-id');
-        try {
-          const res = await fetch(`/api/projects/${projectId}/key`, {
-            method: 'POST'
-          });
-          const data = await res.json();
-          if (data.success) {
-            alert('API Key generated successfully.');
-            loadData();
-          } else {
-            alert('Error generating key: ' + data.error);
-          }
-        } catch (err) {
-          alert('Failed to generate API key.');
-        }
-      });
-    });
   }
 
   // Render Table Logs
@@ -303,10 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Update Config Dropdown
   function updateProjectSelector(projects) {
     const currentSelected = projectSelector.value;
-    projectSelector.innerHTML = `
-      <option value="" disabled selected>Choose a project...</option>
-      <option value="new" style="font-weight: bold; color: var(--primary-color);">+ Add New Project</option>
-    `;
+    projectSelector.innerHTML = '<option value="" disabled selected>Choose a project...</option>';
 
     projects.forEach(project => {
       const opt = document.createElement('option');
@@ -320,51 +227,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Handle Selector Change (prefill inputs or toggle new fields)
+  // Handle Selector Change (prefill inputs)
   projectSelector.addEventListener('change', (e) => {
     const selectedId = e.target.value;
-    if (selectedId === 'new') {
-      newProjectFields.style.display = 'block';
-      newProjectIdInput.required = true;
-      newProjectNameInput.required = true;
-      newProjectIdInput.value = '';
-      newProjectNameInput.value = '';
-      tokenLimitInput.value = '500000';
-      projectActiveInput.checked = true;
-      submitConfigBtn.textContent = 'Create Project';
-    } else {
-      newProjectFields.style.display = 'none';
-      newProjectIdInput.required = false;
-      newProjectNameInput.required = false;
-      submitConfigBtn.textContent = 'Update Configuration';
-      const project = localProjects.find(p => p.projectId === selectedId);
-      if (project) {
-        tokenLimitInput.value = project.tokenLimit;
-        projectActiveInput.checked = project.isActive;
-      }
+    const project = localProjects.find(p => p.projectId === selectedId);
+    if (project) {
+      tokenLimitInput.value = project.tokenLimit;
+      projectActiveInput.checked = project.isActive;
     }
   });
 
   // Handle Config Form Submit
   configForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const selectedValue = projectSelector.value;
-    let projectId = selectedValue;
-    let name = '';
+    const projectId = projectSelector.value;
     const tokenLimit = parseInt(tokenLimitInput.value, 10);
     const isActive = projectActiveInput.checked;
-
-    if (selectedValue === 'new') {
-      projectId = newProjectIdInput.value.trim();
-      name = newProjectNameInput.value.trim();
-      if (!projectId || !name) {
-        alert('Please fill in both the Project ID and Project Name.');
-        return;
-      }
-    } else {
-      const project = localProjects.find(p => p.projectId === projectId);
-      name = project ? project.name : projectId;
-    }
+    const project = localProjects.find(p => p.projectId === projectId);
+    const name = project ? project.name : projectId;
 
     try {
       const res = await fetch('/api/projects', {
@@ -374,21 +254,10 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       const data = await res.json();
       if (data.success) {
-        alert(selectedValue === 'new' ? 'Project created successfully.' : 'Configuration saved successfully.');
-
-        // Reset form inputs & styles
-        newProjectFields.style.display = 'none';
-        newProjectIdInput.required = false;
-        newProjectNameInput.required = false;
-        submitConfigBtn.textContent = 'Update Configuration';
-
-        // Refresh and select the newly created or updated project
-        await loadData();
-        projectSelector.value = projectId;
-        // Trigger selection change to update inputs
-        projectSelector.dispatchEvent(new Event('change'));
+        alert('Configuration saved successfully.');
+        loadData();
       } else {
-        alert('Failed to save configuration: ' + data.error);
+        alert('Failed to update config: ' + data.error);
       }
     } catch (err) {
       alert('Error connecting to the proxy backend.');
@@ -398,6 +267,34 @@ document.addEventListener('DOMContentLoaded', () => {
   // Handle Refresh Action
   refreshBtn.addEventListener('click', () => {
     loadData();
+  });
+
+  // Handle Log Filter Change
+  logFilter.addEventListener('change', () => {
+    currentPage = 1;
+    renderFilteredAndPaginatedLogs();
+  });
+
+  // Handle Prev Page Action
+  prevPageBtn.addEventListener('click', () => {
+    if (currentPage > 1) {
+      currentPage--;
+      renderFilteredAndPaginatedLogs();
+    }
+  });
+
+  // Handle Next Page Action
+  nextPageBtn.addEventListener('click', () => {
+    const filterVal = logFilter.value;
+    let filteredLogs = localLogs;
+    if (filterVal !== 'all') {
+      filteredLogs = localLogs.filter(log => log.projectId === filterVal);
+    }
+    const totalPages = Math.ceil(filteredLogs.length / pageSize) || 1;
+    if (currentPage < totalPages) {
+      currentPage++;
+      renderFilteredAndPaginatedLogs();
+    }
   });
 
   // Initial Load
