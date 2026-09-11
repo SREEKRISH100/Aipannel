@@ -140,17 +140,68 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalProjectName = document.getElementById('modalProjectName');
   const modalTokenLimit = document.getElementById('modalTokenLimit');
   const modalProjectActive = document.getElementById('modalProjectActive');
+  const modalEndpointPreview = document.getElementById('modalEndpointPreview');
+
+  // Integration / Endpoint Details Modal elements
+  const endpointModal = document.getElementById('endpointModal');
+  const closeEndpointModalBtn = document.getElementById('closeEndpointModalBtn');
+  const dismissEndpointModalBtn = document.getElementById('dismissEndpointModalBtn');
+  const copySnippetBtn = document.getElementById('copySnippetBtn');
+
+  function updateLivePreview() {
+    const slug = modalProjectId.value.trim().toLowerCase() || 'my-project';
+    const origin = window.location.origin;
+    if (modalEndpointPreview) {
+      modalEndpointPreview.textContent = `${origin}/api/v1/projects/${slug}/chat/completions`;
+    }
+  }
+
+  if (modalProjectId) {
+    modalProjectId.addEventListener('input', updateLivePreview);
+  }
 
   function openProjectModal() {
     createProjectForm.reset();
     modalTokenLimit.value = '500000';
     modalProjectActive.checked = true;
+    updateLivePreview();
     projectModal.style.display = 'flex';
     modalProjectId.focus();
   }
 
   function closeProjectModal() {
     projectModal.style.display = 'none';
+  }
+
+  function openEndpointModal(projectId, name) {
+    const origin = window.location.origin;
+    const fullEndpoint = `${origin}/api/v1/projects/${projectId}/chat/completions`;
+    const baseUrl = `${origin}/api/v1/projects/${projectId}`;
+
+    document.getElementById('endpointModalTitle').textContent = `Integration: ${name || projectId}`;
+    document.getElementById('copyFullEndpointInput').value = fullEndpoint;
+    document.getElementById('copyBaseUrlInput').value = baseUrl;
+    document.getElementById('copyProjectIdInput').value = projectId;
+
+    const snippet = `import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: '${baseUrl}'
+});
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Generate a response.' }],
+  max_tokens: 500
+});`;
+
+    document.getElementById('codeSnippetPreview').textContent = snippet;
+    endpointModal.style.display = 'flex';
+  }
+
+  function closeEndpointModal() {
+    endpointModal.style.display = 'none';
   }
 
   if (newProjectBtn) {
@@ -162,13 +213,41 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cancelModalBtn) {
     cancelModalBtn.addEventListener('click', closeProjectModal);
   }
+  if (closeEndpointModalBtn) {
+    closeEndpointModalBtn.addEventListener('click', closeEndpointModal);
+  }
+  if (dismissEndpointModalBtn) {
+    dismissEndpointModalBtn.addEventListener('click', closeEndpointModal);
+  }
 
-  // Close modal when clicking on overlay background
-  projectModal.addEventListener('click', (e) => {
-    if (e.target === projectModal) {
-      closeProjectModal();
-    }
+  // Close modals when clicking on overlay background
+  window.addEventListener('click', (e) => {
+    if (e.target === projectModal) closeProjectModal();
+    if (e.target === endpointModal) closeEndpointModal();
   });
+
+  // Wire up Copy Buttons
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.getAttribute('data-target');
+      const input = document.getElementById(targetId);
+      if (input) {
+        await copyToClipboard(input.value);
+        const originalText = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = originalText; }, 2000);
+      }
+    });
+  });
+
+  if (copySnippetBtn) {
+    copySnippetBtn.addEventListener('click', async () => {
+      const code = document.getElementById('codeSnippetPreview').textContent;
+      await copyToClipboard(code);
+      copySnippetBtn.textContent = '✓ Code Copied!';
+      setTimeout(() => { copySnippetBtn.textContent = '📋 Copy Code Snippet'; }, 2000);
+    });
+  }
 
   // Handle Create Project Form Submission
   createProjectForm.addEventListener('submit', async (e) => {
@@ -192,8 +271,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (data.success) {
         closeProjectModal();
-        alert(`Project "${name}" (${projectId}) created successfully!`);
-        loadData();
+        await loadData();
+        // Automatically pop open the endpoint copy modal for immediate use!
+        openEndpointModal(projectId, name);
       } else {
         alert('Failed to create project: ' + (data.error || 'Unknown error'));
       }
@@ -258,12 +338,24 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
         <div class="project-card-footer">
+          <button class="btn btn-integration btn-endpoints" data-id="${project.projectId}" data-name="${project.name}">
+            🔗 Endpoints
+          </button>
           <button class="btn btn-danger btn-reset" data-id="${project.projectId}">
             Reset Tokens
           </button>
         </div>
       `;
       projectsGrid.appendChild(card);
+    });
+
+    // Wire up Endpoint buttons on each card
+    document.querySelectorAll('.btn-endpoints').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        const name = e.currentTarget.getAttribute('data-name');
+        openEndpointModal(id, name);
+      });
     });
 
     // Wire up reset buttons

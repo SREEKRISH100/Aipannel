@@ -125,11 +125,70 @@
             <input type="checkbox" id="modalProjectActive" checked>
             <label for="modalProjectActive">Project Active & Enabled</label>
           </div>
+          <div class="endpoint-preview-box">
+            <span class="preview-label">Live Endpoint Preview:</span>
+            <code id="modalEndpointPreview">https://.../api/v1/projects/my-project/chat/completions</code>
+          </div>
           <div class="modal-actions">
             <button type="button" id="cancelModalBtn" class="btn btn-secondary">Cancel</button>
             <button type="submit" class="btn btn-primary">Create Project</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Integration & Endpoint Details Modal -->
+    <div id="endpointModal" class="modal-overlay" style="display: none;">
+      <div class="modal-card modal-card-lg">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.25rem;">🔗</span>
+            <h3 id="endpointModalTitle">Project Integration Endpoints</h3>
+          </div>
+          <button type="button" id="closeEndpointModalBtn" class="modal-close">&times;</button>
+        </div>
+        <div class="endpoint-modal-body">
+          <div class="copy-field-group">
+            <label>1. Full Chat Completions Endpoint (Raw POST/Fetch/Axios)</label>
+            <div class="copy-input-row">
+              <input type="text" id="copyFullEndpointInput" readonly>
+              <button type="button" class="btn btn-primary btn-sm copy-btn" data-target="copyFullEndpointInput">
+                📋 Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="copy-field-group">
+            <label>2. OpenAI SDK Base URL (for <code style="color:var(--accent-color)">baseURL</code> property)</label>
+            <div class="copy-input-row">
+              <input type="text" id="copyBaseUrlInput" readonly>
+              <button type="button" class="btn btn-primary btn-sm copy-btn" data-target="copyBaseUrlInput">
+                📋 Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="copy-field-group">
+            <label>3. Project Identifier (Header <code style="color:var(--accent-color)">x-project-id</code>)</label>
+            <div class="copy-input-row">
+              <input type="text" id="copyProjectIdInput" readonly>
+              <button type="button" class="btn btn-primary btn-sm copy-btn" data-target="copyProjectIdInput">
+                📋 Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="copy-field-group">
+            <label>Node.js Quick Integration Snippet</label>
+            <pre class="code-snippet-box"><code id="codeSnippetPreview"></code></pre>
+            <button type="button" id="copySnippetBtn" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;">
+              📋 Copy Code Snippet
+            </button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="dismissEndpointModalBtn" class="btn btn-primary">Done</button>
+        </div>
       </div>
     </div>
   </div>
