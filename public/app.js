@@ -130,10 +130,93 @@ document.addEventListener('DOMContentLoaded', () => {
     nextPageBtn.disabled = currentPage === totalPages;
   }
 
+  // Modal DOM elements
+  const newProjectBtn = document.getElementById('newProjectBtn');
+  const projectModal = document.getElementById('projectModal');
+  const closeModalBtn = document.getElementById('closeModalBtn');
+  const cancelModalBtn = document.getElementById('cancelModalBtn');
+  const createProjectForm = document.getElementById('createProjectForm');
+  const modalProjectId = document.getElementById('modalProjectId');
+  const modalProjectName = document.getElementById('modalProjectName');
+  const modalTokenLimit = document.getElementById('modalTokenLimit');
+  const modalProjectActive = document.getElementById('modalProjectActive');
+
+  function openProjectModal() {
+    createProjectForm.reset();
+    modalTokenLimit.value = '500000';
+    modalProjectActive.checked = true;
+    projectModal.style.display = 'flex';
+    modalProjectId.focus();
+  }
+
+  function closeProjectModal() {
+    projectModal.style.display = 'none';
+  }
+
+  if (newProjectBtn) {
+    newProjectBtn.addEventListener('click', openProjectModal);
+  }
+  if (closeModalBtn) {
+    closeModalBtn.addEventListener('click', closeProjectModal);
+  }
+  if (cancelModalBtn) {
+    cancelModalBtn.addEventListener('click', closeProjectModal);
+  }
+
+  // Close modal when clicking on overlay background
+  projectModal.addEventListener('click', (e) => {
+    if (e.target === projectModal) {
+      closeProjectModal();
+    }
+  });
+
+  // Handle Create Project Form Submission
+  createProjectForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const projectId = modalProjectId.value.trim().toLowerCase();
+    const name = modalProjectName.value.trim();
+    const tokenLimit = parseInt(modalTokenLimit.value, 10) || 500000;
+    const isActive = modalProjectActive.checked;
+
+    if (!projectId || !name) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, name, tokenLimit, isActive })
+      });
+      const data = await res.json();
+      if (data.success) {
+        closeProjectModal();
+        alert(`Project "${name}" (${projectId}) created successfully!`);
+        loadData();
+      } else {
+        alert('Failed to create project: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Failed to connect to server: ' + err.message);
+    }
+  });
+
   // Render Projects Grid
   function renderProjects(projects) {
     if (projects.length === 0) {
-      projectsGrid.innerHTML = `<div class="loading-spinner">No projects registered.</div>`;
+      projectsGrid.innerHTML = `
+        <div class="empty-state-card">
+          <div class="empty-state-icon">🚀</div>
+          <h3>No Projects Registered Yet</h3>
+          <p>Create your first project to start tracking OpenAI token consumption and enforcing limits.</p>
+          <button id="emptyCreateBtn" class="btn btn-primary">➕ Create First Project</button>
+        </div>
+      `;
+      const emptyBtn = document.getElementById('emptyCreateBtn');
+      if (emptyBtn) {
+        emptyBtn.addEventListener('click', openProjectModal);
+      }
       return;
     }
 
