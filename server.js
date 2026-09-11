@@ -10,11 +10,13 @@ import crypto from 'crypto';
 import UsageLog from './models/UsageLog.js';
 import dns from 'dns';
 
-// Fix for Node.js / local ISP querySrv ECONNREFUSED issues with MongoDB Atlas
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1']);
-} catch (e) {
-  // fallback if system restricts DNS override
+// Fix for Node.js / local ISP querySrv ECONNREFUSED issues with MongoDB Atlas (run only locally)
+if (!process.env.VERCEL) {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch (e) {
+    // fallback if system restricts DNS override
+  }
 }
 
 dotenv.config();
@@ -25,13 +27,66 @@ app.use(express.json());
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URL = process.env.MONGO_URL;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// Connect to MongoDB
-mongoose.connect(MONGO_URL)
-  .then(() => console.log('MongoDB connection established successfully.'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+// ─── SERVERLESS DATABASE CONNECTION HELPER ─────────────────────────────────
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+async function connectDB() {
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
+  }
+
+  const mongoUrl = process.env.MONGO_URL;
+  if (!mongoUrl) {
+    throw new Error('MONGO_URL environment variable is not defined. Please add MONGO_URL in your Vercel Project Settings > Environment Variables.');
+  }
+
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 5000,
+    };
+
+    cached.promise = mongoose.connect(mongoUrl, opts).then((m) => {
+      console.log('MongoDB connection established successfully.');
+      return m;
+    });
+  }
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (err) {
+    cached.promise = null;
+    throw err;
+  }
+
+  return cached.conn;
+}
+
+// Middleware to ensure database is connected before handling API requests
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    try {
+      await connectDB();
+    } catch (err) {
+      console.error('Database connection error:', err.message);
+      return res.status(500).json({
+        success: false,
+        error: `Database connection error: ${err.message}`
+      });
+    }
+  }
+  next();
+});
+
+// Non-serverless fallback: pre-warm database connection locally
+if (!process.env.VERCEL) {
+  connectDB().catch((err) => console.error('Initial MongoDB connection error:', err.message));
+}
 
 // ─── ADMIN & DASHBOARD ENDPOINTS ───────────────────────────────────────────
 
@@ -192,14 +247,15 @@ const completionsHandler = async (req, res) => {
     }
 
     const localOpenai = new OpenAI({ apiKey: clientApiKey });
-    const { messages, model, tools, tool_choice, temperature } = req.body;
+    const { messages, model, tools, tool_choice, temperature, max_tokens } = req.body;
 
     const response = await localOpenai.chat.completions.create({
       model: model || process.env.OPENAI_MODEL || 'gpt-4o-mini',
       messages,
       tools,
       tool_choice,
-      temperature
+      temperature,
+      max_tokens: max_tokens || 500
     });
 
     // 4. Log the usage statistics dynamically
